@@ -125,49 +125,11 @@ def embed_chunks(chunks: list[dict]) -> list[dict]:
     return chunks
 
 
-def get_chroma_collection():
-    """Kết nối hoặc tạo ChromaDB collection."""
-    import chromadb
-
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        metadata={"hnsw:space": "cosine"},
-    )
-    return collection
-
-
 def index_to_vectorstore(chunks: list[dict]):
-    """
-    Lưu chunks vào ChromaDB.
-    """
-    collection = get_chroma_collection()
-
-    # Xoá collection cũ nếu đang re-index
-    existing = collection.count()
-    if existing > 0:
-        print(f"  ⚠ Collection đã có {existing} items, xoá và re-index...")
-        import chromadb
-        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-        client = chromadb.PersistentClient(path=str(CHROMA_DIR))
-        client.delete_collection(COLLECTION_NAME)
-        collection = client.create_collection(
-            name=COLLECTION_NAME,
-            metadata={"hnsw:space": "cosine"},
-        )
-
-    # Batch insert (ChromaDB yêu cầu IDs duy nhất)
-    batch_size = 100
-    for i in range(0, len(chunks), batch_size):
-        batch = chunks[i:i + batch_size]
-        collection.add(
-            ids=[f"chunk_{i + j}" for j in range(len(batch))],
-            embeddings=[c["embedding"] for c in batch],
-            documents=[c["content"] for c in batch],
-            metadatas=[c["metadata"] for c in batch],
-        )
-    print(f"  ✓ Indexed {len(chunks)} chunks vào ChromaDB tại {CHROMA_DIR}")
+    """Lưu chunks vào vector store (numpy-based, không cần ChromaDB)."""
+    from .vector_store import save
+    save(chunks)
+    print(f"  ✓ Indexed {len(chunks)} chunks vào vector store")
 
 
 def run_pipeline(force: bool = False):
@@ -176,24 +138,19 @@ def run_pipeline(force: bool = False):
     print("Task 4: Chunking & Indexing")
     print(f"  Chunking: {CHUNKING_METHOD} (size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})")
     print(f"  Embedding: {EMBEDDING_MODEL} (dim={EMBEDDING_DIM})")
-    print(f"  Vector Store: {VECTOR_STORE}")
     print("=" * 50)
 
     # Skip nếu đã có data (trừ khi force=True)
     if not force:
-        try:
-            collection = get_chroma_collection()
-            count = collection.count()
-            if count > 0:
-                print(f"\n✓ ChromaDB đã có {count} chunks — skip re-index. (dùng --force để re-index)")
-                return
-        except Exception:
-            pass
+        from .vector_store import count
+        if count() > 0:
+            print(f"\n✓ Vector store đã có {count()} chunks — skip re-index.")
+            return
 
     docs = load_documents()
     print(f"\n✓ Loaded {len(docs)} documents")
     if not docs:
-        print("⚠ Không tìm thấy documents. Hãy chạy Task 1, 2, 3 trước!")
+        print("⚠ Không tìm thấy documents trong data/standardized/")
         return
 
     chunks = chunk_documents(docs)

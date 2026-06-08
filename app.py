@@ -10,9 +10,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+import streamlit as st
+
 # Inject Streamlit secrets vào os.environ (để các module dùng os.getenv() hoạt động)
 try:
-    import streamlit as st
     for k, v in st.secrets.items():
         if k not in os.environ:
             os.environ[k] = str(v)
@@ -20,12 +21,10 @@ except Exception:
     pass  # Local: dùng .env thay thế
 
 # Dùng model nhẹ trên Streamlit Cloud (RAM hạn chế)
-_IS_CLOUD = os.getenv("STREAMLIT_SERVER_HEADLESS", "") == "1" or os.getenv("IS_CLOUD", "") == "1"
+_IS_CLOUD = os.getenv("IS_CLOUD", "") == "1"
 if _IS_CLOUD:
     os.environ.setdefault("EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
     os.environ.setdefault("EMBEDDING_DIM", "384")
-
-import streamlit as st
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
